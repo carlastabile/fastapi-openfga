@@ -1,82 +1,200 @@
-# FastAPI OpenFGA Project
+# FastAPI OpenFGA RBAC Demo
 
-This project is a FastAPI application that implements a simple API to manage organizations, project managers, roles, and permissions. It utilizes the OpenFGA Python SDK for authorization checks based on a defined OpenFGA authorization model.
+This project demonstrates how to implement **Role-Based Access Control (RBAC)** using OpenFGA with FastAPI. It follows OpenFGA's best practices for coarse-grained access control, starting simple and building up complexity gradually.
+
+## RBAC Model Overview
+
+This demo implements a simple organizational RBAC pattern with:
+
+- **Organizations**: Groups that contain users with specific roles
+- **Users**: Individual actors with roles in organizations  
+- **Resources**: Assets owned by organizations
+- **Roles**: `admin` and `member` with different permission levels
+
+## OpenFGA Model
+
+```yaml
+type user
+
+type organization
+  relations
+    define admin: [user]
+    define member: [user]
+    
+    define can_add_member: admin
+    define can_delete_member: admin
+    define can_view_member: admin or member
+    define can_add_resource: admin or member
+
+type resource
+  relations
+    define organization: [organization]
+    
+    define can_delete_resource: admin from organization
+    define can_view_resource: admin from organization or member from organization
+```
+
+## Key RBAC Concepts Demonstrated
+
+### 1. **Direct Role Assignment**
+- Users are directly assigned `admin` or `member` roles in organizations
+
+### 2. **Permission Inheritance**
+- Resource permissions inherit from organization roles
+- Uses OpenFGA's `from` keyword to map organization roles to resource permissions
+- `admin from organization` means "users who are admins of the organization that owns this resource"
+
+### 3. **Persistent Data Storage**
+- Uses SQLite database with SQLAlchemy for data persistence
+- Data survives server restarts unlike in-memory storage
+- ACID compliance ensures data integrity
+
+## Permission Matrix
+
+| Role | Add Members | Delete Members | View Members | Add Resources | Delete Resources | View Resources |
+|------|-------------|----------------|--------------|---------------|------------------|----------------|
+| **admin** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **member** | ❌ | ❌ | ✅ | ✅ | ❌ | ✅ |
 
 ## Project Structure
 
 ```
-fastapi-openfga-project
-├── app
-│   ├── main.py                  # Entry point of the FastAPI application
-│   ├── models                   # Contains data models
-│   │   ├── organization.py      # Organization model
-│   │   ├── project_manager.py    # Project Manager model
-│   │   ├── role.py              # Role model
-│   │   └── permission.py         # Permission model
-│   ├── routes                   # Contains API routes
-│   │   ├── organization_routes.py # CRUD operations for organizations
-│   │   ├── project_manager_routes.py # CRUD operations for project managers
-│   │   ├── role_routes.py       # CRUD operations for roles
-│   │   └── permission_routes.py  # CRUD operations for permissions
-│   ├── services                 # Contains service classes
-│   │   └── authorization_service.py # Handles authorization checks
-│   └── utils                    # Utility functions
-│       └── openfga_client.py    # OpenFGA client setup
-├── requirements.txt             # Project dependencies
-└── README.md                    # Project documentation
+fastapi-openfga-project/
+├── app/
+│   ├── main.py                  # FastAPI application entry point
+│   ├── config.py                # Configuration settings
+│   ├── database.py              # SQLAlchemy database setup and models
+│   ├── models/
+│   │   ├── organization.py      # Organization Pydantic models
+│   │   └── resource.py          # Resource Pydantic models
+│   ├── routes/
+│   │   ├── organization_routes.py # Organization management endpoints
+│   │   └── resource_routes.py   # Resource management endpoints
+│   ├── services/
+│   │   └── authorization_service.py # OpenFGA integration
+│   ├── utils/
+│   │   └── openfga_client.py    # OpenFGA client wrapper
+│   └── openfga/
+│       └── model.fga.yaml       # OpenFGA model definition
+├── app.db                       # SQLite database file (auto-created)
+├── requirements.txt
+└── README.md
 ```
+
+## Features
+
+- **Role-Based Access Control**: OpenFGA-powered authorization
+- **Persistent Storage**: SQLite database with SQLAlchemy ORM
+- **Async Support**: Full async/await support for database operations
+- **Auto-reload**: Development server with hot reload
+- **API Documentation**: Interactive Swagger UI documentation
+- **Data Validation**: Pydantic models for request/response validation
+
+## Requirements
+
+- Python 3.9+
+- Docker
 
 ## Setup Instructions
 
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   cd fastapi-openfga-project
+1. **Start OpenFGA Server**
+   You can learn more about [OpenFGA here](https://github.com/openfga/openfga)
+   ```bash
+   # Using Docker
+   docker run --rm -p 8080:8080 openfga/openfga run
    ```
 
-2. Install the required dependencies:
-   ```
+2. **Install Dependencies**
+   ```bash
    pip install -r requirements.txt
    ```
 
-3. Run the FastAPI application:
+3. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your OpenFGA server details
    ```
+
+4. **Run the Application**
+   ```bash
    uvicorn app.main:app --reload
    ```
+   
+   The application will:
+   - Connect to OpenFGA server
+   - Initialize SQLite database tables automatically
+   - Start the FastAPI server on http://127.0.0.1:8000
 
-## Usage
+5. **Access the API**
+   - API Documentation: http://127.0.0.1:8000/docs
+   - RBAC Info: http://127.0.0.1:8000/rbac-info
+   - Health Check: http://127.0.0.1:8000/health
 
-Once the application is running, you can access the API documentation at `http://127.0.0.1:8000/docs`. This will provide you with an interactive interface to test the API endpoints.
+## Dependencies
 
-## API Endpoints Overview
+- **FastAPI 0.115.0**: Modern web framework for building APIs
+- **SQLAlchemy 2.0.36**: SQL toolkit and Object-Relational Mapping
+- **aiosqlite 0.20.0**: Async SQLite driver
+- **OpenFGA SDK 0.9.5**: OpenFGA python client library
+- **Pydantic 2.10.0**: Data validation and settings management
+- **Uvicorn 0.32.0**: ASGI server implementation
 
-- **Organizations**
-  - `GET /organizations`: Retrieve all organizations
-  - `POST /organizations`: Create a new organization
-  - `GET /organizations/{id}`: Retrieve a specific organization
-  - `PUT /organizations/{id}`: Update a specific organization
-  - `DELETE /organizations/{id}`: Delete a specific organization
+## API Endpoints
 
-- **Project Managers**
-  - `GET /project-managers`: Retrieve all project managers
-  - `POST /project-managers`: Create a new project manager
-  - `GET /project-managers/{id}`: Retrieve a specific project manager
-  - `PUT /project-managers/{id}`: Update a specific project manager
-  - `DELETE /project-managers/{id}`: Delete a specific project manager
+### Organizations
+- `GET /organizations` - List accessible organizations
+- `POST /organizations` - Create organization (creator becomes admin)
+- `GET /organizations/{id}` - Get organization details
+- `PUT /organizations/{id}` - Update organization (admin only)
+- `DELETE /organizations/{id}` - Delete organization (admin only)
+- `POST /organizations/{id}/members` - Add member (admin only)
+- `DELETE /organizations/{id}/members/{user_id}` - Remove member (admin only)
 
-- **Roles**
-  - `GET /roles`: Retrieve all roles
-  - `POST /roles`: Create a new role
-  - `GET /roles/{id}`: Retrieve a specific role
-  - `PUT /roles/{id}`: Update a specific role
-  - `DELETE /roles/{id}`: Delete a specific role
+### Resources
+- `GET /resources` - List accessible resources
+- `POST /resources` - Create resource (admin or member)
+- `GET /resources/{id}` - Get resource details
+- `PUT /resources/{id}` - Update resource (admin only)
+- `DELETE /resources/{id}` - Delete resource (admin only)
+- `GET /resources/{id}/permissions` - Check user permissions on resource
 
-- **Permissions**
-  - `GET /permissions`: Retrieve all permissions
-  - `POST /permissions`: Create a new permission
-  - `GET /permissions/{id}`: Retrieve a specific permission
-  - `PUT /permissions/{id}`: Update a specific permission
-  - `DELETE /permissions/{id}`: Delete a specific permission
+## Example Usage Flow
+
+1. **Create an Organization**
+   ```bash
+   curl -X POST "http://localhost:8000/organizations?user_id=alice" \
+        -H "Content-Type: application/json" \
+        -d '{"name": "Acme Corp", "description": "Example organization"}'
+   ```
+
+2. **Add a Member**
+   ```bash
+   curl -X POST "http://localhost:8000/organizations/{org_id}/members?user_id=alice" \
+        -H "Content-Type: application/json" \
+        -d '{"user_id": "bob", "role": "member", "organization_id": "{org_id}"}'
+   ```
+
+3. **Create a Resource**
+   ```bash
+   curl -X POST "http://localhost:8000/resources?user_id=bob" \
+        -H "Content-Type: application/json" \
+        -d '{"name": "Database Server", "resource_type": "database", "organization_id": "{org_id}"}'
+   ```
+
+4. **Check Permissions**
+   ```bash
+   curl "http://localhost:8000/resources/{resource_id}/permissions?user_id=bob"
+   ```
+
+## Next Steps for Extension
+
+This basic RBAC model can be extended by:
+
+1. Adding more roles (e.g., `viewer`, `manager`)
+2. Implementing resource-specific permissions
+3. Adding hierarchical organizations
+4. Implementing time-based access controls
+5. Adding attribute-based access control (ABAC) elements
 
 ## License
 
